@@ -1,0 +1,113 @@
+---
+title: "restoration_monitoring_shiny"
+author: "Jasper"
+format: html
+editor: visual
+---
+
+Load packages and scripts
+```{r}
+source_python('restoration_monitoring_gee.py')
+source('restoration_monitoring_model.R')
+```
+
+
+```{r}
+click <- data.frame(lat = numeric(), lng = numeric(), .nonce = numeric())
+
+
+ui <- navbarPage(
+  
+  "Restoration monitoring",
+  
+  tabPanel("Map",
+    div(class="outer",
+
+      tags$head(
+         #Include our custom CSS
+        includeCSS("styles.css"),
+        includeScript("gomap.js")
+      ),
+
+      # If not using custom CSS, set height of leafletOutput to a number instead of percent
+      leafletOutput("map", width="100%", height="95%"),
+
+      # Shiny versions prior to 0.11 should use class = "modal" instead.
+      absolutePanel(id = "controls", class = "panel panel-default", fixed = TRUE,
+        draggable = TRUE, top = 60, left = "auto", right = 20, bottom = "auto",
+        width = 1100, height = "auto",
+
+        h2("Restoration monitor"),
+
+        plotlyOutput("graph", height = 600)
+      ),
+      
+      actionButton("use_clik_loc", "Check location"),
+      actionButton("end_clik_loc", "Model restoration")
+      
+    )
+  ),
+  
+  tabPanel("Data explorer")
+)
+
+```
+
+
+```{r}
+server <- function(input, output) {
+  
+  output$map <- renderLeaflet({
+    leaflet() %>% addProviderTiles('Esri.WorldImagery')})
+
+  # save the coordinates
+  observeEvent(input$use_clik_loc, {
+    
+    last_click <- isolate(as.data.frame(input$map_click))
+    click <<- bind_rows(last_click)
+    
+    print(click)
+
+  })
+  
+  # Stop the click process
+  observeEvent(input$end_clik_loc, {
+    
+    # Extract GEE
+    gee_output <- extract_gee(click[1,'lng'], click[1,'lat'])
+    l8_df <- data.frame(gee_output[1])
+    gpm_df <- data.frame(gee_output[2])
+    
+    # Model the vegetation and store in plot
+    restoration_plot <- model_vegetation(l8_df, gpm_df)
+    
+    
+    output$graph <- renderPlotly(restoration_plot)
+    
+    })
+  
+}
+
+```
+
+```{r}
+shinyApp(ui, server)
+
+```
+
+```{r}
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
