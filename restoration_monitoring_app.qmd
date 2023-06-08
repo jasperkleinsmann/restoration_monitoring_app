@@ -30,25 +30,27 @@ ui <- navbarPage(
       ),
 
       # If not using custom CSS, set height of leafletOutput to a number instead of percent
-      leafletOutput("map", width="100%", height="85%"),
+      leafletOutput("map", width="100%", height="90%"),
 
       # Shiny versions prior to 0.11 should use class = "modal" instead.
       absolutePanel(id = "controls", class = "panel panel-default", fixed = TRUE,
+
         draggable = TRUE, top = 60, left = "auto", right = 20, bottom = "auto",
-        width = 750, height = "auto",
+        width = 800, height = "auto",
 
         h2("Restoration monitor"),
         
         selectInput("year", "Start modelling (year):", seq(2015,2022),
                     selected = 2018),
 
+        textOutput("print_mae"),
+
         plotlyOutput("graph", height = 600) 
       ),
       
-      actionButton("model_location", "Model restoration"),
+      actionButton("model_location", "Model restoration", class="fa-solid fa-gears"),
 
     textOutput("print_location"),
-    textOutput("location_warning"),
 
       tags$button(
       id = 'close',
@@ -71,7 +73,7 @@ server <- function(input, output, session) {
     
     leaflet() %>% 
     addProviderTiles('Esri.WorldImagery')  %>% 
-    addDrawToolbar(singleFeature=TRUE)}) 
+    addDrawToolbar(singleFeature=TRUE, polylineOptions = FALSE, circleOptions = FALSE,circleMarkerOptions = FALSE,polygon=FALSE)}) 
 
 
   observeEvent(input$map_draw_new_feature,{
@@ -101,7 +103,10 @@ server <- function(input, output, session) {
       # Model the vegetation and store in plot
       restoration_plot <- model_vegetation(l8_df, gpm_df, start_year)
     
-      output$graph <- renderPlotly(restoration_plot) 
+      output$graph <- renderPlotly(restoration_plot[[1]]) 
+
+      output$print_mae <- renderText(paste0('The regreening score is ', round(restoration_plot[[2]]$mae,3),
+                                            '. A regreening score >0.5 indicates a significant increase in vegetation cover'))
 
       removeModal()
 
@@ -125,8 +130,8 @@ server <- function(input, output, session) {
 
       # If larger than 40 ha, show warning
       if(area > 40){
-        showModal(modalDialog('Polygon size has to be smaller than 40 Hecatares', footer=NULL))
-        Sys.sleep(3)
+        showModal(modalDialog('Polygon has to be smaller than 40 hecatares', footer=NULL))
+        Sys.sleep(4)
         removeModal()
       }
 
@@ -143,7 +148,10 @@ server <- function(input, output, session) {
       # Model the vegetation and store in plot
       restoration_plot <- model_vegetation(l8_df, gpm_df, start_year)
     
-      output$graph <- renderPlotly(restoration_plot) 
+      output$graph <- renderPlotly(restoration_plot[[1]]) 
+
+      output$print_mae <- renderText(paste0('The regreening score is ', round(restoration_plot[[2]]$mae,3),
+                                            '. A regreening score >0.5 indicates a significant increase in vegetation cover'))
 
       removeModal()
       }

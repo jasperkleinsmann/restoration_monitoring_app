@@ -102,7 +102,7 @@ model_vegetation <- function(refl_l8, gpm, year_start_int){
   # Forecast ndvi based on models and precipitation
   fc <- fabletools::forecast(armax, new_data = ts_pred[,c('yearmonth', 'prcp', 'prcp_lag1', 'prcp_lag2')])
   
-  # Extract 95% confidence levels
+  # Extract 80% confidence levels
   ci <- fc$ndvi_int %>% 
     hilo(80) 
   fc <- fc %>% 
@@ -152,17 +152,16 @@ model_vegetation <- function(refl_l8, gpm, year_start_int){
                                 list(color='rgb(0,100,80)'), alpha=1) %>% 
     add_lines(x = ~as.Date(yearmonth), y = ~ndvi_pred, name = 'NDVI prediction', type = 'scatter', mode = 'lines',line
               =list(color='rgb(0,0,60)'),alpha=0.5)%>%
+    # 50% CI
+    add_ribbons(data = fc_ci, x = ~as.Date(yearmonth), ymin = ~lower_50, ymax = ~upper_50, line = list(color = 'rgba(7, 164, 181, 0)'), 
+                fillcolor = 'rgba(7, 164, 181, 0.2)', name = '50% confidence', alpha=0.1) %>% 
     # 80% CI
-    add_ribbons(fc_ts, x = ~as.Date(yearmonth), ymin = ~lower, ymax = ~upper, line = list(color = 'rgba(7, 164, 181, 0)'), 
-                fillcolor = 'rgba(7, 164, 181, 0.2)', name = '80% confidence', alpha=0.1) %>% 
-    # 95% CI
-    add_ribbons(data = fc_ci, x = ~as.Date(yearmonth), ymin = ~lower_95, ymax = ~upper_95, line = list(color = 'rgba(7, 164, 181,0)'), 
-                fillcolor = 'rgba(7,164, 181, 0.2)', name = '95% confidence',alpha=0.2) %>% 
-    add_annotations(x=as.Date('2022-01-01'), y=0.7, text=paste0('MAEp = ', round(mae,3)), showarrow=F) %>% 
+    add_ribbons(data = fc_ci, x = ~as.Date(yearmonth), ymin = ~lower, ymax = ~upper, line = list(color = 'rgba(7, 164, 181,0)'), 
+                fillcolor = 'rgba(7,164, 181, 0.2)', name = '80% confidence',alpha=0.2) %>% 
+    add_annotations(x=as.Date('2022-01-01'), y=0.7, text=paste0('MAEp = ', as.character(round(mae,3))), showarrow=F) %>% 
     layout(yaxis = list(range=c(0,1), title = 'NDVI'),
            xaxis = list(title = ''))
   
   # Return plot
-  return(restoration_plot)
+  return(list(restoration_plot, mae))
 }
-
