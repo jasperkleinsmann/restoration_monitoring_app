@@ -6,11 +6,11 @@ editor: visual
 ---
 
 Load packages and scripts
-```{r}
-source_python('restoration_monitoring_gee.py')
-source('restoration_monitoring_model.R')
-```
 
+```{r}
+source('restoration_monitoring_model.R')
+source_python('restoration_monitoring_gee.py')
+```
 
 ```{r}
 click <- data.frame(lat = numeric(), lng = numeric(), .nonce = numeric())
@@ -30,84 +30,140 @@ ui <- navbarPage(
       ),
 
       # If not using custom CSS, set height of leafletOutput to a number instead of percent
-      leafletOutput("map", width="100%", height="95%"),
+      leafletOutput("map", width="100%", height="85%"),
 
       # Shiny versions prior to 0.11 should use class = "modal" instead.
       absolutePanel(id = "controls", class = "panel panel-default", fixed = TRUE,
         draggable = TRUE, top = 60, left = "auto", right = 20, bottom = "auto",
-        width = 1100, height = "auto",
+        width = 750, height = "auto",
 
         h2("Restoration monitor"),
+        
+        selectInput("year", "Start modelling (year):", seq(2015,2022),
+                    selected = 2018),
 
-        plotlyOutput("graph", height = 600)
+        plotlyOutput("graph", height = 600) 
       ),
       
-      actionButton("use_clik_loc", "Check location"),
-      actionButton("end_clik_loc", "Model restoration")
+      actionButton("model_location", "Model restoration"),
+
+    textOutput("print_location"),
+    textOutput("location_warning"),
+
+      tags$button(
+      id = 'close',
+      type = "button",
+      class = "btn action-button",
+      onclick = "setTimeout(function(){window.close();},500);",  # close browser
+      "Close appication"),
       
     )
   ),
   
   tabPanel("Data explorer")
 )
-
 ```
 
-
 ```{r}
-server <- function(input, output) {
+server <- function(input, output, session) {
   
   output$map <- renderLeaflet({
-    leaflet() %>% addProviderTiles('Esri.WorldImagery')})
+    
+    leaflet() %>% 
+    addProviderTiles('Esri.WorldImagery')  %>% 
+    addDrawToolbar(singleFeature=TRUE)}) 
 
-  # save the coordinates
-  observeEvent(input$use_clik_loc, {
-    
-    last_click <- isolate(as.data.frame(input$map_click))
-    click <<- bind_rows(last_click)
-    
-    print(click)
+
+  observeEvent(input$map_draw_new_feature,{
+    feature <- input$map_draw_new_feature
+
+    loc <<- feature
+
+    print(feature)
 
   })
-  
+
   # Stop the click process
-  observeEvent(input$end_clik_loc, {
+  observeEvent(input$model_location, {
+
+    if(loc$geometry$type == "Point"){
+
+      output$print_location <- renderText(paste("Model is computed for the point", round(loc$geometry$coordinates[[1]],2), "Latitude", round(loc$geometry$coordinates[[2]],2), "Longitude"))
+      showModal(modalDialog('The latest satellite data is extracted from the servers and a reference vegetation is being modelled. Please give it some time ;)', footer=NULL))
+
+      # Extract GEE
+      gee_output <- extract_gee(loc$geometry$coordinates[[1]], loc$geometry$coordinates[[2]])
+      l8_df <- data.frame(gee_output[1])
+      gpm_df <- data.frame(gee_output[2])
     
-    # Extract GEE
-    gee_output <- extract_gee(click[1,'lng'], click[1,'lat'])
-    l8_df <- data.frame(gee_output[1])
-    gpm_df <- data.frame(gee_output[2])
+      start_year <- input$year
+
+      # Model the vegetation and store in plot
+      restoration_plot <- model_vegetation(l8_df, gpm_df, start_year)
     
-    # Model the vegetation and store in plot
-    restoration_plot <- model_vegetation(l8_df, gpm_df)
+      output$graph <- renderPlotly(restoration_plot) 
+
+      removeModal()
+
+    }
+
+    if(loc$geometry$type == "Polygon"){
+
+      # If polygon, make coordinate spatial and calculate area
+      cor1 <- loc$geometry$coordinates[[1]][[1]]
+      cor2 <- loc$geometry$coordinates[[1]][[2]]
+      cor3 <- loc$geometry$coordinates[[1]][[3]]
+      cor4 <- loc$geometry$coordinates[[1]][[4]]
+      cor5 <- loc$geometry$coordinates[[1]][[5]]
+      # Make sf polygon
+      pol <- st_polygon(list(
+        cbind(c(cor1[[1]],cor2[[1]],cor3[[1]],cor4[[1]],cor5[[1]]),
+              c(cor1[[2]],cor2[[2]],cor3[[2]],cor4[[2]],cor5[[2]]))))
+      poly <- st_sfc(pol, crs=4269)
+      # Calculate area
+      area <- as.numeric(st_area(poly) / 10000)
+
+      # If larger than 40 ha, show warning
+      if(area > 40){
+        showModal(modalDialog('Polygon size has to be smaller than 40 Hecatares', footer=NULL))
+        Sys.sleep(3)
+        removeModal()
+      }
+
+      else{
+      showModal(modalDialog('The latest satellite data is extracted from the servers and a reference vegetation is being modelled. Please give it some time ;)', footer=NULL))
+
+      # Extract GEE
+      gee_output <- extract_gee_polygon(cor1, cor2, cor3, cor4, cor5)
+      l8_df <- data.frame(gee_output[1])
+      gpm_df <- data.frame(gee_output[2])
     
+      start_year <- input$year
+
+      # Model the vegetation and store in plot
+      restoration_plot <- model_vegetation(l8_df, gpm_df, start_year)
     
-    output$graph <- renderPlotly(restoration_plot)
-    
+      output$graph <- renderPlotly(restoration_plot) 
+
+      removeModal()
+      }
+    }
+
+    })
+
+    # Close the app
+    observe({
+      if (input$close > 0) stopApp() # stop shiny
+    })
+
+
+    session$onSessionEnded(function() {
+      stopApp()
     })
   
 }
-
 ```
 
 ```{r}
 shinyApp(ui, server)
-
 ```
-
-```{r}
-
-
-```
-
-
-
-
-
-
-
-
-
-
-
-

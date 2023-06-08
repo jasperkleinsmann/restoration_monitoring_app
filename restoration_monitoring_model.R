@@ -14,9 +14,12 @@ library(zoo)
 library(plotly)
 library(shiny)
 library(leaflet)
+library(reticulate)
+library(shinycssloaders)
+library(leaflet.extras)
 
 
-model_vegetation <- function(refl_l8, gpm){
+model_vegetation <- function(refl_l8, gpm, year_start_int){
   
   refl_l8$date <- as.Date(refl_l8$date, tryFormats = "%d/%m/%Y")
   gpm$date <- as.Date(gpm$date, tryFormats = "%d/%m/%Y")
@@ -49,7 +52,12 @@ model_vegetation <- function(refl_l8, gpm){
   
   # Compute NDVI
   refl_l8$ndvi <- (refl_l8$SR_B5 - refl_l8$SR_B4) / (refl_l8$SR_B5 + refl_l8$SR_B4)
-  
+
+  # Take average NDVI date (average of all pixels in polygon)
+  refl_l8 <- refl_l8 %>% 
+    group_by(date) %>% 
+    summarise(ndvi = mean(ndvi, na.rm=T))
+
   # CONVERT GPM
   gpm$precipitationCal <- 0.5 * gpm$precipitationCal
   gpm <- gpm %>%   
@@ -85,8 +93,8 @@ model_vegetation <- function(refl_l8, gpm){
   
   
   ############ Train model
-  ts_ref <- ts_month_int %>% filter(year(yearmonth) < 2017)
-  ts_pred <- ts_month_int %>% filter(year(yearmonth) >= 2017)
+  ts_ref <- ts_month_int %>% filter(year(yearmonth) < year_start_int)
+  ts_pred <- ts_month_int %>% filter(year(yearmonth) >= year_start_int)
   
   armax <- ts_ref %>% 
     model(ARIMA(ndvi_int ~ prcp + prcp_lag1 + prcp_lag2 + pdq(d=0) + PDQ(D=0), stepwise = T, ic='aicc'))
